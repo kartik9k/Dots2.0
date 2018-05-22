@@ -1,22 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -34,23 +15,184 @@
 #include "mcu/mcu_sim.h"
 #endif
 
-/* BLE */
 #include "nimble/ble.h"
 #include "host/ble_hs.h"
 #include "services/gap/ble_svc_gap.h"
 
-/* Application-specified header. */
 #include "bleprph.h"
 
-/** Log data. */
 struct log bleprph_log;
 int g_led_pin;
 
 static int bleprph_gap_event(struct ble_gap_event *event, void *arg);
 
-/**
- * Logs information about a connection to the console.
- */
+
+static const ble_uuid128_t gatt_svr_svc_sec_test_uuid =
+    BLE_UUID128_INIT(0xff, 0x71, 0xa2, 0x59, 0x14, 0x58, 0xc8, 0x12,
+                     0x4e, 0x99, 0x7d, 0x95, 0x12, 0x2f, 0x36, 0x59);
+
+static const ble_uuid128_t gatt_svr_chr_sec_test_rand_uuid =
+        BLE_UUID128_INIT(0xf6, 0x6d, 0xd9, 0x07, 0x71, 0x00, 0x16, 0xb0,
+                         0xe1, 0x45, 0x75, 0x89, 0x9a, 0x66, 0x3a, 0x5c);
+
+static const ble_uuid128_t gatt_svr_chr_sec_test_static_uuid =
+        BLE_UUID128_INIT(0xf7, 0x6d, 0xc9, 0x07, 0x71, 0x0d, 0x16, 0xb0,
+                         0xe1, 0x45, 0x7f, 0x89, 0x2e, 0x65, 0x3a, 0x5d);
+
+static uint8_t gatt_svr_sec_test_static_val;
+
+static int
+gatt_svr_chr_access_sec_test(uint16_t conn_handle, uint16_t attr_handle,
+                             struct ble_gatt_access_ctxt *ctxt,
+                             void *arg);
+
+static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
+    {
+        /*** Service: Security test. */
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = &gatt_svr_svc_sec_test_uuid.u,
+        .characteristics = (struct ble_gatt_chr_def[]) { {
+            /*** Characteristic: Random number generator. */
+            .uuid = &gatt_svr_chr_sec_test_rand_uuid.u,
+            .access_cb = gatt_svr_chr_access_sec_test,
+            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
+        }, {
+            /*** Characteristic: Static value. */
+            .uuid = &gatt_svr_chr_sec_test_static_uuid.u,
+            .access_cb = gatt_svr_chr_access_sec_test,
+            .flags = BLE_GATT_CHR_F_READ |
+                     BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC,
+        }, {
+            0, /* No more characteristics in this service. */
+        } },
+    },
+
+    {
+        0, /* No more services. */
+    },
+};
+
+static int
+gatt_svr_chr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
+                   void *dst, uint16_t *len)
+{
+    uint16_t om_len;
+    int rc;
+
+    om_len = OS_MBUF_PKTLEN(om);
+    if (om_len < min_len || om_len > max_len) {
+        return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    }
+
+    rc = ble_hs_mbuf_to_flat(om, dst, max_len, len);
+    if (rc != 0) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    return 0;
+}
+
+static int
+gatt_svr_chr_access_sec_test(uint16_t conn_handle, uint16_t attr_handle,
+                             struct ble_gatt_access_ctxt *ctxt,
+                             void *arg)
+{
+    const ble_uuid_t *uuid;
+    int rand_num;
+    int rc;
+
+    uuid = ctxt->chr->uuid;
+    
+
+    /* Determine which characteristic is being accessed by examining its
+     * 128-bit UUID.
+     */
+
+    if (ble_uuid_cmp(uuid, &gatt_svr_chr_sec_test_rand_uuid.u) == 0) {
+        assert(ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR);
+
+        /* Respond with a 32-bit random number. */
+        rand_num = rand();
+        rc = os_mbuf_append(ctxt->om, &rand_num, sizeof rand_num);
+        return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
+
+    if (ble_uuid_cmp(uuid, &gatt_svr_chr_sec_test_static_uuid.u) == 0) {
+        switch (ctxt->op) {
+        case BLE_GATT_ACCESS_OP_READ_CHR:
+            rc = os_mbuf_append(ctxt->om, &gatt_svr_sec_test_static_val,
+                                sizeof gatt_svr_sec_test_static_val);
+            return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+
+        case BLE_GATT_ACCESS_OP_WRITE_CHR:
+            rc = gatt_svr_chr_write(ctxt->om,
+                                    sizeof gatt_svr_sec_test_static_val,
+                                    sizeof gatt_svr_sec_test_static_val,
+                                    &gatt_svr_sec_test_static_val, NULL);
+            hal_gpio_toggle(g_led_pin);
+            return rc;
+
+        default:
+            assert(0);
+            return BLE_ATT_ERR_UNLIKELY;
+        }
+    }
+
+    assert(0);
+    return BLE_ATT_ERR_UNLIKELY;
+}
+
+void
+gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
+{
+    char buf[BLE_UUID_STR_LEN];
+
+    switch (ctxt->op) {
+    case BLE_GATT_REGISTER_OP_SVC:
+        BLEPRPH_LOG(DEBUG, "registered service %s with handle=%d\n",
+                    ble_uuid_to_str(ctxt->svc.svc_def->uuid, buf),
+                    ctxt->svc.handle);
+        break;
+
+    case BLE_GATT_REGISTER_OP_CHR:
+        BLEPRPH_LOG(DEBUG, "registering characteristic %s with "
+                           "def_handle=%d val_handle=%d\n",
+                    ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
+                    ctxt->chr.def_handle,
+                    ctxt->chr.val_handle);
+        break;
+
+    case BLE_GATT_REGISTER_OP_DSC:
+        BLEPRPH_LOG(DEBUG, "registering descriptor %s with handle=%d\n",
+                    ble_uuid_to_str(ctxt->dsc.dsc_def->uuid, buf),
+                    ctxt->dsc.handle);
+        break;
+
+    default:
+        assert(0);
+        break;
+    }
+}
+
+int
+gatt_svr_init(void)
+{
+    int rc;
+
+    rc = ble_gatts_count_cfg(gatt_svr_svcs);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = ble_gatts_add_svcs(gatt_svr_svcs);
+    if (rc != 0) {
+        return rc;
+    }
+
+    return 0;
+}
+
+
 static void
 bleprph_print_conn_desc(struct ble_gap_conn_desc *desc)
 {
@@ -75,11 +217,6 @@ bleprph_print_conn_desc(struct ble_gap_conn_desc *desc)
                 desc->sec_state.bonded);
 }
 
-/**
- * Enables advertising with the following parameters:
- *     o General discoverable mode.
- *     o Undirected connectable mode.
- */
 static void
 bleprph_advertise(void)
 {
@@ -142,21 +279,6 @@ bleprph_advertise(void)
     }
 }
 
-/**
- * The nimble host executes this callback when a GAP event occurs.  The
- * application associates a GAP event callback with each connection that forms.
- * bleprph uses the same callback for all connections.
- *
- * @param event                 The type of event being signalled.
- * @param ctxt                  Various information pertaining to the event.
- * @param arg                   Application-specified argument; unuesd by
- *                                  bleprph.
- *
- * @return                      0 if the application successfully handled the
- *                                  event; nonzero on failure.  The semantics
- *                                  of the return code is specific to the
- *                                  particular GAP event being signalled.
- */
 static int
 bleprph_gap_event(struct ble_gap_event *event, void *arg)
 {
@@ -180,7 +302,7 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
             /* Connection failed; resume advertising. */
             bleprph_advertise();
         }
-        hal_gpio_toggle(g_led_pin);
+        // hal_gpio_toggle(g_led_pin);
 
         return 0;
 
@@ -190,7 +312,7 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
         BLEPRPH_LOG(INFO, "\n");
 
         /* Connection terminated; resume advertising. */
-        hal_gpio_toggle(g_led_pin);
+        // hal_gpio_toggle(g_led_pin);
         bleprph_advertise();
 
         return 0;
@@ -216,6 +338,7 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
+        // hal_gpio_toggle(g_led_pin);
         BLEPRPH_LOG(INFO, "subscribe event; conn_handle=%d attr_handle=%d "
                           "reason=%d prevn=%d curn=%d previ=%d curi=%d\n",
                     event->subscribe.conn_handle,
@@ -267,14 +390,6 @@ bleprph_on_sync(void)
     bleprph_advertise();
 }
 
-/**
- * main
- *
- * The main task for the project. This function initializes the packages,
- * then starts serving events from default event queue.
- *
- * @return int NOTE: this function should never return!
- */
 int
 main(void)
 {
@@ -303,14 +418,11 @@ main(void)
     assert(rc == 0);
 
     /* Set the default device name. */
-    rc = ble_svc_gap_device_name_set("nimble-bleprph1");
+    rc = ble_svc_gap_device_name_set("prph2");
     assert(rc == 0);
 
     conf_load();
 
-    /* If this app is acting as the loader in a split image setup, jump into
-     * the second stage application instead of starting the OS.
-     */
 #if MYNEWT_VAL(SPLIT_LOADER)
     {
         void *entry;
@@ -321,9 +433,6 @@ main(void)
     }
 #endif
 
-    /*
-     * As the last thing, process events from default event queue.
-     */
     while (1) {
         os_eventq_run(os_eventq_dflt_get());
     }

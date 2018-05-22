@@ -22,6 +22,12 @@
 
 #include "log/log.h"
 #include "nimble/ble.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include "bsp/bsp.h"
+#include "host/ble_hs.h"
+#include "host/ble_uuid.h"
 #ifdef __cplusplus
 extern "C" {
 #endif

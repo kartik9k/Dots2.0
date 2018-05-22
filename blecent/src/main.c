@@ -32,146 +32,157 @@ int g_led_pin;
 
 static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 
-// static int
-// blecent_on_read(uint16_t conn_handle,
-//                 const struct ble_gatt_error *error,
-//                 struct ble_gatt_attr *attr,
-//                 void *arg)
-// {
-//     BLECENT_LOG(INFO, "Read complete; status=%d conn_handle=%d", error->status,
-//                 conn_handle);
-//     if (error->status == 0) {
-//         BLECENT_LOG(INFO, " attr_handle=%d value=", attr->handle);
-//         print_mbuf(attr->om);
-//     }
-//     BLECENT_LOG(INFO, "\n");
+static int
+blecent_on_read(uint16_t conn_handle,
+                const struct ble_gatt_error *error,
+                struct ble_gatt_attr *attr,
+                void *arg)
+{
+    BLECENT_LOG(INFO, "Read complete; status=%d conn_handle=%d", error->status,
+                conn_handle);
+    if (error->status == 0) {
+        BLECENT_LOG(INFO, " attr_handle=%d value=", attr->handle);
+        print_mbuf(attr->om);
+    }
+    BLECENT_LOG(INFO, "\n");
 
-//     return 0;
-// }
+    return 0;
+}
 
-// /**
-//  * Application callback.  Called when the write to the ANS Alert Notification
-//  * Control Point characteristic has completed.
-//  */
-// static int
-// blecent_on_write(uint16_t conn_handle,
-//                  const struct ble_gatt_error *error,
-//                  struct ble_gatt_attr *attr,
-//                  void *arg)
-// {
-//     BLECENT_LOG(INFO, "Write complete; status=%d conn_handle=%d "
-//                       "attr_handle=%d\n",
-//                 error->status, conn_handle, attr->handle);
+/**
+ * Application callback.  Called when the write to the ANS Alert Notification
+ * Control Point characteristic has completed.
+ */
+static int
+blecent_on_write(uint16_t conn_handle,
+                 const struct ble_gatt_error *error,
+                 struct ble_gatt_attr *attr,
+                 void *arg)
+{
+    BLECENT_LOG(INFO, "Write complete; status=%d conn_handle=%d "
+                      "attr_handle=%d\n",
+                error->status, conn_handle, attr->handle);
 
-//     return 0;
-// }
+    // if (BLE_ATT_ERR_INSUFFICIENT_AUTHEN ==0x05)
 
-// /**
-//  * Application callback.  Called when the attempt to subscribe to notifications
-//  * for the ANS Unread Alert Status characteristic has completed.
-//  */
-// static int
-// blecent_on_subscribe(uint16_t conn_handle,
-//                      const struct ble_gatt_error *error,
-//                      struct ble_gatt_attr *attr,
-//                      void *arg)
-// {
-//     BLECENT_LOG(INFO, "Subscribe complete; status=%d conn_handle=%d "
-//                       "attr_handle=%d\n",
-//                 error->status, conn_handle, attr->handle);
 
-//     return 0;
-// }
 
-// /**
-//  * Performs three concurrent GATT operations against the specified peer:
-//  * 1. Reads the ANS Supported New Alert Category characteristic.
-//  * 2. Writes the ANS Alert Notification Control Point characteristic.
-//  * 3. Subscribes to notifications for the ANS Unread Alert Status
-//  *    characteristic.
-//  *
-//  * If the peer does not support a required service, characteristic, or
-//  * descriptor, then the peer lied when it claimed support for the alert
-//  * notification service!  When this happens, or if a GATT procedure fails,
-//  * this function immediately terminates the connection.
-//  */
-// static void
-// blecent_read_write_subscribe(const struct peer *peer)
-// {
-//     const struct peer_chr *chr;
-//     const struct peer_dsc *dsc;
-//     uint8_t value[2];
-//     int rc;
+    return 0;
+}
 
-//     /* Read the supported-new-alert-category characteristic. */
-//     chr = peer_chr_find_uuid(peer,
-//                              BLE_UUID16_DECLARE(BLECENT_SVC_ALERT_UUID),
-//                              BLE_UUID16_DECLARE(BLECENT_CHR_SUP_NEW_ALERT_CAT_UUID));
-//     if (chr == NULL) {
-//         BLECENT_LOG(ERROR, "Error: Peer doesn't support the Supported New "
-//                            "Alert Category characteristic\n");
-//         goto err;
-//     }
+/**
+ * Application callback.  Called when the attempt to subscribe to notifications
+ * for the ANS Unread Alert Status characteristic has completed.
+ */
+static int
+blecent_on_subscribe(uint16_t conn_handle,
+                     const struct ble_gatt_error *error,
+                     struct ble_gatt_attr *attr,
+                     void *arg)
+{
+    BLECENT_LOG(INFO, "Subscribe complete; status=%d conn_handle=%d "
+                      "attr_handle=%d\n",
+                error->status, conn_handle, attr->handle);
 
-//     rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle,
-//                         blecent_on_read, NULL);
-//     if (rc != 0) {
-//         BLECENT_LOG(ERROR, "Error: Failed to read characteristic; rc=%d\n",
-//                     rc);
-//         goto err;
-//     }
 
-//     /* Write two bytes (99, 100) to the alert-notification-control-point
-//      * characteristic.
-//      */
-//     chr = peer_chr_find_uuid(peer,
-//                              BLE_UUID16_DECLARE(BLECENT_SVC_ALERT_UUID),
-//                              BLE_UUID16_DECLARE(BLECENT_CHR_ALERT_NOT_CTRL_PT));
-//     if (chr == NULL) {
-//         BLECENT_LOG(ERROR, "Error: Peer doesn't support the Alert "
-//                            "Notification Control Point characteristic\n");
-//         goto err;
-//     }
+    return 0;
+}
 
-//     value[0] = 99;
-//     value[1] = 100;
-//     rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle,
-//                               value, sizeof value, blecent_on_write, NULL);
-//     if (rc != 0) {
-//         BLECENT_LOG(ERROR, "Error: Failed to write characteristic; rc=%d\n",
-//                     rc);
-//     }
+/**
+ * Performs three concurrent GATT operations against the specified peer:
+ * 1. Reads the ANS Supported New Alert Category characteristic.
+ * 2. Writes the ANS Alert Notification Control Point characteristic.
+ * 3. Subscribes to notifications for the ANS Unread Alert Status
+ *    characteristic.
+ *
+ * If the peer does not support a required service, characteristic, or
+ * descriptor, then the peer lied when it claimed support for the alert
+ * notification service!  When this happens, or if a GATT procedure fails,
+ * this function immediately terminates the connection.
+ */
+static void
+blecent_read_write_subscribe(const struct peer *peer)
+{
+    const struct peer_chr *chr;
+    const struct peer_dsc *dsc;
+    uint8_t value[2]; 
+    int rc;
+    /* Write two bytes (99, 100) to the alert-notification-control-point
+     * characteristic.
+     */
+    chr = peer_chr_find_uuid(peer,
+                             BLE_UUID128_DECLARE(0xff, 0x71, 0xa2, 0x59, 0x14, 0x58, 0xc8, 0x12,
+                     0x4e, 0x99, 0x7d, 0x95, 0x12, 0x2f, 0x36, 0x59),
+                             BLE_UUID128_DECLARE(0xf7, 0x6d, 0xc9, 0x07, 0x71, 0x0d, 0x16, 0xb0,
+                         0xe1, 0x45, 0x7f, 0x89, 0x2e, 0x65, 0x3a, 0x5d));
+    if (chr == NULL) {
+        BLECENT_LOG(ERROR, "Error: Peer doesn't support the Supported New "
+                           "Alert Category characteristic\n");
+        goto err;
+    }
 
-//     /* Subscribe to notifications for the Unread Alert Status characteristic.
-//      * A central enables notifications by writing two bytes (1, 0) to the
-//      * characteristic's client-characteristic-configuration-descriptor (CCCD).
-//      */
-//     dsc = peer_dsc_find_uuid(peer,
-//                              BLE_UUID16_DECLARE(BLECENT_SVC_ALERT_UUID),
-//                              BLE_UUID16_DECLARE(BLECENT_CHR_UNR_ALERT_STAT_UUID),
-//                              BLE_UUID16_DECLARE(BLE_GATT_DSC_CLT_CFG_UUID16));
-//     if (dsc == NULL) {
-//         BLECENT_LOG(ERROR, "Error: Peer lacks a CCCD for the Unread Alert "
-//                            "Status characteristic\n");
-//         goto err;
-//     }
+    rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle,
+                        blecent_on_read, NULL);
+    if (rc != 0) {
+        BLECENT_LOG(ERROR, "Error: Failed to read characteristic; rc=%d\n",
+                    rc);
+        goto err;
+    }
 
-//     value[0] = 1;
-//     value[1] = 0;
-//     rc = ble_gattc_write_flat(peer->conn_handle, dsc->dsc.handle,
-//                               value, sizeof value, blecent_on_subscribe, NULL);
-//     if (rc != 0) {
-//         BLECENT_LOG(ERROR, "Error: Failed to subscribe to characteristic; "
-//                            "rc=%d\n", rc);
-//         goto err;
-//     }
+    chr = peer_chr_find_uuid(peer,
+                             BLE_UUID128_DECLARE(0xff, 0x71, 0xa2, 0x59, 0x14, 0x58, 0xc8, 0x12,
+                     0x4e, 0x99, 0x7d, 0x95, 0x12, 0x2f, 0x36, 0x59),
+                             BLE_UUID128_DECLARE(0xf7, 0x6d, 0xc9, 0x07, 0x71, 0x0d, 0x16, 0xb0,
+                         0xe1, 0x45, 0x7f, 0x89, 0x2e, 0x65, 0x3a, 0x5d));
+    if (chr == NULL) {
 
-//     return;
+        BLECENT_LOG(ERROR, "Error: Peer doesn't support the Alert "
+                           "Notification Control Point characteristic\n");
+        goto err;
+    }
 
-// err:
-//     /* Terminate the connection. */
-//     ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-// }
+    value[0] = 99;
+    value[1] = 100;
+
+
+    rc = ble_gattc_write_flat(peer->conn_handle, chr->chr.val_handle,
+                              value, sizeof value, blecent_on_write, NULL);
+    if (rc != 0) {
+
+        BLECENT_LOG(ERROR, "Error: Failed to write characteristic; rc=%d\n",
+                    rc);
+    }
+
+    /* Subscribe to notifications for the Unread Alert Status characteristic.
+     * A central enables notifications by writing two bytes (1, 0) to the
+     * characteristic's client-characteristic-configuration-descriptor (CCCD).
+     */
+    dsc = peer_dsc_find_uuid(peer,
+                             BLE_UUID16_DECLARE(BLECENT_SVC_ALERT_UUID),
+                             BLE_UUID16_DECLARE(BLECENT_CHR_UNR_ALERT_STAT_UUID),
+                             BLE_UUID16_DECLARE(BLE_GATT_DSC_CLT_CFG_UUID16));
+    if (dsc == NULL) {
+        BLECENT_LOG(ERROR, "Error: Peer lacks a CCCD for the Unread Alert "
+                           "Status characteristic\n");
+        goto err;
+    }
+
+    value[0] = 1;
+    value[1] = 0;
+    rc = ble_gattc_write_flat(peer->conn_handle, dsc->dsc.handle,
+                              value, sizeof value, blecent_on_subscribe, NULL);
+    if (rc != 0) {
+        BLECENT_LOG(ERROR, "Error: Failed to subscribe to characteristic; "
+                           "rc=%d\n", rc);
+        goto err;
+    }
+
+    return;
+
+err:
+    /* Terminate the connection. */
+    ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+}
 
 /**
  * Called when service discovery of the specified peer has completed.
@@ -199,7 +210,7 @@ blecent_on_disc_complete(const struct peer *peer, int status, void *arg)
      * write, and subscribe to notifications.
      */
 
-    // blecent_read_write_subscribe(peer);
+    blecent_read_write_subscribe(peer);
 }
 
 /**
@@ -286,11 +297,6 @@ blecent_should_connect(const struct ble_gap_disc_desc *disc)
     return 0;
 }
 
-/**
- * Connects to the sender of the specified advertisement of it looks
- * interesting.  A device is "interesting" if it advertises connectability and
- * support for the Alert Notification service.
- */
 static void
 blecent_connect_if_interesting(const struct ble_gap_disc_desc *disc)
 {
@@ -314,8 +320,6 @@ blecent_connect_if_interesting(const struct ble_gap_disc_desc *disc)
     rc = ble_gap_connect(BLE_OWN_ADDR_PUBLIC, &disc->addr, 30000, NULL,
                          blecent_gap_event, NULL);
     if (rc == BLE_HS_ENOMEM) {
-        hal_gpio_toggle(g_led_pin);
-
         BLECENT_LOG(ERROR, "Error: Failed to connect to device; addr_type=%d "
                            "addr=%s\n", disc->addr.type,
                            addr_str(disc->addr.val));
@@ -323,20 +327,6 @@ blecent_connect_if_interesting(const struct ble_gap_disc_desc *disc)
     }
 }
 
-/**
- * The nimble host executes this callback when a GAP event occurs.  The
- * application associates a GAP event callback with each connection that is
- * established.  blecent uses the same callback for all connections.
- *
- * @param event                 The event being signalled.
- * @param arg                   Application-specified argument; unused by
- *                                  blecent.
- *
- * @return                      0 if the application successfully handled the
- *                                  event; nonzero on failure.  The semantics
- *                                  of the return code is specific to the
- *                                  particular GAP event being signalled.
- */
 static int
 blecent_gap_event(struct ble_gap_event *event, void *arg)
 {
@@ -376,6 +366,14 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
             if (rc != 0) {
                 BLECENT_LOG(ERROR, "Failed to add peer; rc=%d\n", rc);
                 return 0;
+            }
+
+            rc = ble_gap_security_initiate(event->connect.conn_handle);
+            hal_gpio_toggle(g_led_pin);
+            if (rc != 0){
+                
+                BLECENT_LOG(ERROR, "Failed to authenticate; rc=%d\n", rc);
+                return 0;                
             }
 
             rc = peer_disc_all(event->connect.conn_handle,
