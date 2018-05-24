@@ -129,7 +129,8 @@ gatt_svr_chr_access_sec_test(uint16_t conn_handle, uint16_t attr_handle,
                                     sizeof gatt_svr_sec_test_static_val,
                                     sizeof gatt_svr_sec_test_static_val,
                                     &gatt_svr_sec_test_static_val, NULL);
-            hal_gpio_toggle(g_led_pin);
+            if (gatt_svr_sec_test_static_val == 0x01)
+                hal_gpio_toggle(g_led_pin);
             return rc;
 
         default:
@@ -292,6 +293,7 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
                        event->connect.status == 0 ? "established" : "failed",
                        event->connect.status);
         if (event->connect.status == 0) {
+            hal_gpio_toggle(g_led_pin);
             rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
             assert(rc == 0);
             bleprph_print_conn_desc(&desc);
@@ -418,7 +420,7 @@ main(void)
     assert(rc == 0);
 
     /* Set the default device name. */
-    rc = ble_svc_gap_device_name_set("prph2");
+    rc = ble_svc_gap_device_name_set("nimble-bleperiph1");
     assert(rc == 0);
 
     conf_load();
