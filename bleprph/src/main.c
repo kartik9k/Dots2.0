@@ -399,7 +399,7 @@ main(void)
     g_led_pin = LED_BLINK_PIN;
     hal_gpio_init_out(g_led_pin, 0);
     /* Set initial BLE device address. */
-    memcpy(g_dev_addr, (uint8_t[6]){0x1a, 0x1b, 0x1c, 0x00, 0x00, 0x00}, 6);
+    memcpy(g_dev_addr, (uint8_t[6]){0x2a, 0x2b, 0x2c, 0x00, 0x00, 0x00}, 6);
     /* Initialize OS */
     sysinit();
 
@@ -420,7 +420,7 @@ main(void)
     assert(rc == 0);
 
     /* Set the default device name. */
-    rc = ble_svc_gap_device_name_set("nimble-bleperiph1");
+    rc = ble_svc_gap_device_name_set("prph2");
     assert(rc == 0);
 
     conf_load();

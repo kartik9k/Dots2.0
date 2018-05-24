@@ -30,11 +30,45 @@ struct log blecent_log;
 int flag = 0;
 int g_led_pin;
 const struct peer_chr *chr_array[10];
+const struct peer* peer_array[10];
+static struct os_callout blinky_callout;
 
 static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 static void blecent_scan(void);
-static int
-blecent_on_read(uint16_t conn_handle,
+static int blecent_on_write(uint16_t conn_handle, 
+                 const struct ble_gatt_error *error,
+                 struct ble_gatt_attr *attr,
+                 void *arg);
+
+static void timer_ev_cb(struct os_event *ev)
+{
+    assert(ev != NULL);
+    hal_gpio_toggle(g_led_pin);
+    
+    int iter = 0;
+    uint8_t value;
+    for (iter = 0; iter < 2; iter += 1){
+        value = 0x01;
+        int rc;
+        rc = ble_gattc_write_flat(peer_array[iter]->conn_handle, chr_array[iter]->chr.val_handle,
+                                  &value, sizeof value, blecent_on_write, NULL);
+        if (rc != 0) {
+
+            BLECENT_LOG(ERROR, "Error: Failed to write characteristic; rc=%d\n",
+                        rc);
+        }        
+    }
+    os_callout_reset(&blinky_callout, OS_TICKS_PER_SEC);
+}
+
+static void init_timer(void)
+{
+    os_callout_init(&blinky_callout, os_eventq_dflt_get(),
+                    timer_ev_cb, NULL);
+    os_callout_reset(&blinky_callout, OS_TICKS_PER_SEC);
+}
+
+static int blecent_on_read(uint16_t conn_handle,
                 const struct ble_gatt_error *error,
                 struct ble_gatt_attr *attr,
                 void *arg)
@@ -50,8 +84,7 @@ blecent_on_read(uint16_t conn_handle,
     return 0;
 }
 
-static int
-blecent_on_write(uint16_t conn_handle,
+static int blecent_on_write(uint16_t conn_handle,
                  const struct ble_gatt_error *error,
                  struct ble_gatt_attr *attr,
                  void *arg)
@@ -59,13 +92,10 @@ blecent_on_write(uint16_t conn_handle,
     BLECENT_LOG(INFO, "Write complete; status=%d conn_handle=%d "
                       "attr_handle=%d\n",
                 error->status, conn_handle, attr->handle);
-
-    // if (error->status != 0)
     return 0;
 }
 
-static void
-blecent_read_write_subscribe(const struct peer *peer)
+static void blecent_read_write_subscribe(const struct peer *peer)
 {
     const struct peer_chr *chr;
     uint8_t value; 
@@ -114,9 +144,15 @@ blecent_read_write_subscribe(const struct peer *peer)
 
 
     chr_array[flag] = chr;
+    peer_array[flag] = peer;
+
     if (flag == 0){
         flag = 1;
         blecent_scan();
+    }
+    else{
+        init_timer();
+
     }
     return;
 
