@@ -9,20 +9,12 @@
 #ifdef ARCH_sim
 #include "mcu/mcu_sim.h"
 #endif
-
-/* BLE */
 #include "nimble/ble.h"
 #include "controller/ble_ll.h"
 #include "host/ble_hs.h"
-
-/* RAM HCI transport. */
 #include "transport/ram/ble_hci_ram.h"
-
-/* Mandatory services. */
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
-
-/* Application-specified header. */
 #include "blecent.h"
 
 /** Log data. */
@@ -303,11 +295,6 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
                 return 0;
             }   
 
-            // if (flag == 0){
-            //     flag = 1;
-            //     blecent_scan();
-            // }
-
         } else {
             BLECENT_LOG(ERROR, "Error: Connection failed; status=%d\n",
                         event->connect.status);
@@ -380,8 +367,6 @@ int
 main(void)
 {
     int rc;
-
-    /* Set initial BLE device address. */
     memcpy(g_dev_addr, (uint8_t[6]){0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a}, 6);
 
     sysinit();
@@ -406,6 +391,5 @@ main(void)
     while (1) {
         os_eventq_run(os_eventq_dflt_get());
     }
-
     return 0;
 }
