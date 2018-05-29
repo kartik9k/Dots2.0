@@ -24,6 +24,8 @@ int led_pin = 11;
 struct log bleprph_log;
 struct log blecent_log;
 int flag = 0;
+int one = 0, two = 0;
+
 
 
 static int bleprph_gap_event(struct ble_gap_event *event, void *arg);
@@ -44,16 +46,26 @@ static void timer_ev_cb(struct os_event *ev){
     assert(ev != NULL);    
     int iter = 0;
     uint8_t value;
-    for (iter = 0; iter < 1; iter += 1){
-        value = 0x01;
-        int rc;
-        rc = ble_gattc_write_flat(peer_array[iter]->conn_handle, chr_array[iter]->chr.val_handle,
-                                  &value, sizeof value, blecent_on_write, NULL);
-        if (rc != 0) {
+    int max_iter_value = 0;
 
-            BLECENT_LOG(ERROR, "Error: Failed to write characteristic; rc=%d\n",
-                        rc);
-        }               
+    if (one)
+        max_iter_value = 1;
+    else if (two)
+        max_iter_value = 2;
+
+    for (iter = 0; iter <  max_iter_value; iter += 1){
+        if (hal_gpio_read(30)){
+            value = 0x01;
+            int rc;
+            rc = ble_gattc_write_flat(peer_array[iter]->conn_handle, chr_array[iter]->chr.val_handle,
+                                      &value, sizeof value, blecent_on_write, NULL);
+            if (rc != 0) {
+
+                BLECENT_LOG(ERROR, "Error: Failed to write characteristic; rc=%d\n",
+                            rc);
+            }                     
+        }
+      
     }
     os_callout_reset(&blinky_callout, OS_TICKS_PER_SEC/4);
 }
@@ -140,8 +152,12 @@ static void blecent_read_write_subscribe(const struct peer *peer)
     chr_array[flag] = chr;
     peer_array[flag] = peer;
 
-    flag = 1;
-    init_timer();
+    if (two == 1 && flag == 0){
+        flag = 1;
+        blecent_scan();
+    }
+    else
+        init_timer();
     return;
 
 err:
@@ -427,7 +443,12 @@ static int gatt_svr_chr_access_sec_test(uint16_t conn_handle, uint16_t attr_hand
                                     sizeof gatt_svr_sec_test_static_val,
                                     &gatt_svr_sec_test_static_val, NULL);
             if (gatt_svr_sec_test_static_val == 0x01){
-                // one = 1;
+                one = 1;
+                blecent_scan();
+            }
+
+            else if (gatt_svr_sec_test_static_val == 0x02){
+                two = 1;
                 blecent_scan();
             }
 
@@ -639,6 +660,8 @@ int main(void){
     sysinit();
 
     hal_gpio_init_out(led_pin, 0);
+    hal_gpio_init_out(30, 1);
+
     log_register("multirole", &blecent_log, &log_console_handler, NULL,
                  LOG_SYSLEVEL);
 
